@@ -2,15 +2,12 @@
 #include <vector>
 #include <numeric>
 #include <cassert>
-#include <cmath>
 #include <algorithm>
 #include <functional>
 #include <iomanip>
 #include <tr1/random>
 
 #include "solutions.h"
-
-#define _USE_MATH_DEFINES
 
 enum Method
 {
@@ -201,71 +198,140 @@ Real outer(const Solution<Real> &solve, Real d, unsigned n, const Method outer_m
     return I;
 }
 
+template<typename Real>
+inline
+Real pre_attenuation(const Solution<Real> &solve, const Real d, const unsigned n)
+{
+    Real integral = 1.0;
+    for(unsigned j = 0; j < n; ++j)
+    {
+        integral *= solve.attenuation_1st(solve.X(j*d));
+//        integral *= solve.attenuation_2nd(solve.X(j*d));
+    }
+    return integral;
+}
+
+template<typename Real>
+Real pre_outer(const Solution<Real> &solve,
+           const Real d,
+           const unsigned n)
+{
+    Real I = 0.0;
+
+    for(unsigned i = 0; i < n-1; ++i)
+    {
+        I += solve.emission_1st(solve.X(i*d)) * pre_attenuation(solve, d, i);
+//        I += solve.emission_2nd(solve.X(i*d)) * pre_attenuation(solve, d, i);
+//        I += solve.emission_2nd_approx(solve.X(i*d)) * pre_attenuation(solve, d, i);
+    }
+
+    return I;
+}
+
 typedef long double Real;
 std::tr1::random_device rd;
 std::tr1::subtract_with_carry_01<Real, 48, 10, 24> gen(rd());
 
 int main()
 {
+    bool pre_integrated_test = true;
+
     std::vector<Real> I;
-    VRI_solution_00<Real> _solution;
-    const Solution<Real> &solve(_solution);
 
-    Method exp_method, inner_method, outer_method;
-
-//    exp_method = LINEAR;
-//    exp_method = QUADRATIC;
-//    exp_method = CUBIC;
-//    exp_method = QUARTIC;
-//    exp_method = QUINTIC;
-    exp_method = EXACT;
-
-//    inner_method = MONTE_CARLO;
-//    inner_method = RIEMANN;
-//    inner_method = TRAPEZOID;
-    inner_method = SIMPSON;
-//    inner_method = GAUSS_QUADRATURE;
-//    inner_method = GAUSS_QUADRATURE_5;
-
-//    outer_method = RIEMANN;
-//    outer_method = TRAPEZOID;
-    outer_method = SIMPSON;
-//    outer_method = BOOLE;
-
-    //Number of tests to be made
-    unsigned N = 8;
-
-    std::cout << std::setprecision(20);
-
-    //Domain size and step size
-    Real D = 1.0;
-    Real d = 0.125;
-    std::tr1::uniform_real<> dis(0.0, D);
-    for(unsigned test = 0; test < N; ++test)
+    if(!pre_integrated_test)
     {
-        unsigned n = unsigned((D / d) + 1);
-        std::cout << 1.0 / (n-1) << " " << std::flush;
-        std::cerr << "(" << n-1 << "," << std::flush;
+        VRI_solution_00<Real> _solution;
+        const Solution<Real> &solve(_solution);
 
-        std::vector<Real> samples;
-        if(inner_method == MONTE_CARLO)
+        Method exp_method, inner_method, outer_method;
+
+    //    exp_method = LINEAR;
+    //    exp_method = QUADRATIC;
+    //    exp_method = CUBIC;
+    //    exp_method = QUARTIC;
+    //    exp_method = QUINTIC;
+        exp_method = EXACT;
+
+    //    inner_method = MONTE_CARLO;
+    //    inner_method = RIEMANN;
+    //    inner_method = TRAPEZOID;
+        inner_method = SIMPSON;
+    //    inner_method = GAUSS_QUADRATURE;
+    //    inner_method = GAUSS_QUADRATURE_5;
+
+    //    outer_method = RIEMANN;
+    //    outer_method = TRAPEZOID;
+        outer_method = SIMPSON;
+    //    outer_method = BOOLE;
+
+        //Number of tests to be made
+        unsigned N = 8;
+
+        std::cout << std::setprecision(20);
+
+        //Domain size and step size
+        Real D = 1.0;
+        Real d = 0.125;
+        std::tr1::uniform_real<> dis(0.0, D);
+        for(unsigned test = 0; test < N; ++test)
         {
-            // ... Create a new array everytime
-            samples.resize(n);
-            for(Real& v : samples)
-                v = dis(gen);
-            std::sort(samples.begin(), samples.end());
+            unsigned n = unsigned((D / d) + 1);
+            std::cout << 1.0 / (n-1) << " " << std::flush;
+            std::cerr << "(" << n-1 << "," << std::flush;
+
+            std::vector<Real> samples;
+            if(inner_method == MONTE_CARLO)
+            {
+                // ... Create a new array everytime
+                samples.resize(n);
+                for(Real& v : samples)
+                    v = dis(gen);
+                std::sort(samples.begin(), samples.end());
+            }
+
+            Real sol = 0.0, num = 0.0;
+            sol = solve.sol(D);
+            num = outer(solve, d, n, outer_method, inner_method, exp_method, samples);
+
+            I.push_back(fabs(sol-num));
+            d = d * 0.5;
+
+            std::cerr << I[I.size()-1] << ") " << std::flush;
         }
-
-        Real sol = 0.0, num = 0.0;
-        sol = solve.sol(D);
-        num = outer(solve, d, n, outer_method, inner_method, exp_method, samples);
-
-        I.push_back(fabs(sol-num));
-        d = d * 0.5;
-
-        std::cerr << I[I.size()-1] << ") " << std::flush;
     }
+    else
+    {
+    //    Exp_solution_00<Real> _solution;
+        Exp_solution_02<Real> _solution;
+        const Solution<Real> &solve(_solution);
+
+        //Number of tests to be made
+        unsigned N = 8;
+
+        std::cout << std::setprecision(20);
+
+        //Domain size and step size
+        Real D = 1.0;
+        Real d = 0.125;
+        for(unsigned test = 0; test < N; ++test)
+        {
+            unsigned n = unsigned((D / d) + 1);
+            std::cout << 1.0 / (n-1) << " " << std::flush;
+            std::cerr << "(" << n-1 << "," << std::flush;
+
+            _solution.d = d;
+    //        Real sol = solve.sol(D);
+    //        Real num = attenuation(solve, d, n);
+            Real sol = solve.sol_vri(D);
+            Real num = pre_outer(solve, d, n);
+
+            I.push_back(fabs(sol-num));
+            d = d * 0.5;
+
+            std::cerr << I[I.size()-1] << ") " << std::flush;
+        }
+    }
+
     std::cout << std::endl;
     std::cerr << std::endl;
 
