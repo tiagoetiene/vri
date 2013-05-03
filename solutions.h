@@ -1,8 +1,6 @@
 #ifndef SOLUTIONS_EXP_H
 #define SOLUTIONS_EXP_H
 
-#include <numeric>
-
 const long double PI = std::atan(1.0)*4.0;
 
 template<typename Real>

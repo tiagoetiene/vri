@@ -1,9 +1,6 @@
 #include <iostream>
-#include <vector>
-#include <numeric>
 #include <cassert>
 #include <algorithm>
-#include <functional>
 #include <iomanip>
 #include <tr1/random>
 
