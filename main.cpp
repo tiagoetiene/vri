@@ -3,263 +3,85 @@
 #include <algorithm>
 #include <iomanip>
 #include <tr1/random>
+#include <boost/program_options.hpp>
+#include <boost/tuple/tuple.hpp>
 
 #include "solutions.h"
-
-enum Method
-{
-    MONTE_CARLO,
-    RIEMANN,
-    TRAPEZOID,
-    LINEAR,
-    QUADRATIC,
-    CUBIC,
-    QUARTIC,
-    QUINTIC,
-    EXACT,
-    GAUSS_QUADRATURE,
-    GAUSS_QUADRATURE_5,
-    SIMPSON,
-    BOOLE
-};
-
-
-template<typename Real>
-inline
-const std::vector<Real>& inner(const Solution<Real> &solve,
-                               Real d, unsigned i, Method method,
-                               const std::vector<Real>& pos_array,
-                               std::vector<Real>& integrands)
-{
-    if(method == MONTE_CARLO)
-    {
-        size_t j = integrands.size();
-        while(j < pos_array.size() and pos_array[j] <= i * d)
-            integrands.push_back(d * solve.T(pos_array[j++]));
-
-    }
-    else if(method == RIEMANN)
-    {
-        if(i >= 2)
-        {
-            size_t j = integrands.size();
-            if(j < i-1)
-                integrands.push_back(solve.T(j * d) * d);
-        }
-    }
-    else if(method == TRAPEZOID)
-    {
-        size_t j = integrands.size()+1;
-        if(j < i+1)
-            integrands.push_back((solve.T(j*d) + solve.T((j-1)*d)) * d * 0.5);
-    }
-    else if(method == SIMPSON)
-    {
-        size_t j = integrands.size()+1;
-        if(i >= 1)
-        {
-            integrands.push_back((solve.T((j-1)*d) + 4.0 * solve.T((j - 0.5)*d) + solve.T((j+0)*d)) * d /6.0);
-        }
-    }
-    else if(method == GAUSS_QUADRATURE)
-    {
-        static Real P[] = {-1.0 / sqrtl(3.0), +1.0 / sqrtl(3.0)};
-        static Real W[] = {1.0, 1.0};
-
-        if(i >= 1)
-        {
-            Real a = (i-1)*d;
-            Real b = i*d;
-            Real int_ab = 0.0;
-            for(unsigned j = 0; j < 2; ++j) int_ab += solve.T( 0.5 * (b-a) * P[j] + 0.5 * (a + b)) * W[j];
-            integrands.push_back( 0.5*(b-a) * int_ab );
-        }
-
-    }
-    else if(method == GAUSS_QUADRATURE_5)
-    {
-        static Real P[] = {-sqrtl(15.0) / 5.0, 0.0, +sqrtl(15.0) / 5.0};
-        static Real W[] = {5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0};
-
-        if(i >= 1)
-        {
-            Real a = (i-1)*d;
-            Real b = i*d;
-            Real int_ab = 0.0;
-            for(unsigned j = 0; j < 3; ++j) int_ab += solve.T( 0.5 * (b-a) * P[j] + 0.5 * (a + b)) * W[j];
-            integrands.push_back( 0.5*(b-a) * int_ab );
-        }
-    }
-    else
-        assert(0);
-
-    return integrands;
-}
-
-template<typename Real>
-inline
-Real exponential(const std::vector<Real>& integrands, Real& S, Method method)
-{
-    static size_t last_size = 0;
-    if(integrands.size() == 0 or integrands.size() == last_size)
-        return S;
-
-    last_size = integrands.size();
-    const Real s = integrands[last_size-1];
-
-    if (method == LINEAR)
-        S = S * (1);
-    else if (method == QUADRATIC)
-        S = S * (1 - s);
-    else if (method == CUBIC)
-        S = S * (1 - s + 0.5 * s * s);
-    else if (method == QUARTIC)
-        S = S * (1 - s + 0.5 * s * s - (1.0/6.0) * s * s * s);
-    else if (method == QUINTIC)
-        S = S * (1 - s + 0.5 * s * s - (1.0/6.0) * s * s * s + (1.0/24.0) * s * s * s * s);
-    else if (method == EXACT)
-        S = exp(-std::accumulate(integrands.begin(), integrands.end(), Real(0.0)));
-    else
-        assert(0);
-
-    return S;
-}
-
-template<typename Real>
-Real outer(const Solution<Real> &solve, Real d, unsigned n, const Method outer_method, const Method inner_method, const Method exp_method,
-           const std::vector<Real>& samples)
-{
-    std::vector<Real> integrands;
-    Real alpha = 1.0;
-    Real I = 0.0;
-
-    integrands.reserve(n);
-    if (outer_method == RIEMANN)
-    {
-        for(unsigned i = 1; i < n; ++i)
-            I += solve.C(i * d) * solve.T(i * d) * d * exponential(inner(solve, d, i, inner_method, samples, integrands), alpha, exp_method);
-    }
-    else if(outer_method == TRAPEZOID)
-    {
-        Real A, B;
-        A = solve.C(0 * d) * solve.T(0 * d) * exponential(inner(solve, d, 0, inner_method, samples, integrands), alpha, exp_method);
-        for(unsigned i = 1; i < n; ++i)
-        {
-            B = solve.C(i*d) * solve.T(i*d) * exponential(inner(solve, d, i, inner_method, samples, integrands), alpha, exp_method);
-            I += (A+B) * d * 0.5;
-            A = B;
-        }
-    }
-    else if(outer_method == SIMPSON)
-    {
-        Real fa, fm, fb;
-        unsigned a, b, c;
-
-        a = 0;
-        fa = solve.C(a * d) * solve.T(a * d) * exponential(inner(solve, d, a, inner_method, samples, integrands), alpha, exp_method);
-        for(unsigned i = 2; i < n; i += 2)
-        {
-            b = i-1;
-            c = i-0;
-            fm = solve.C(b * d) * solve.T(b * d) * exponential(inner(solve, d, b, inner_method, samples, integrands), alpha, exp_method);
-            fb = solve.C(c * d) * solve.T(c * d) * exponential(inner(solve, d, c, inner_method, samples, integrands), alpha, exp_method);
-            I += fa + 4.0 * fm + fb;
-            fa = fb;
-        }
-        I *= (2.0 * d) / 6.0;
-    }
-    else if(outer_method == BOOLE)
-    {
-        static const Real W[] = {7.0, 32.0, 12.0, 32.0, 7.0};
-        Real f[5];
-
-        f[0] = solve.C(0 * d) * solve.T(0 * d) * exponential(inner(solve, d, 0, inner_method, samples, integrands), alpha, exp_method);
-        for(unsigned i = 4; i < n; i += 4)
-        {
-            for(int k = 3; k >= 0; --k)
-            {
-                unsigned l = i-k;
-                f[4-k] = solve.C(l * d) * solve.T(l * d) * exponential(inner(solve, d, l, inner_method, samples, integrands), alpha, exp_method);
-            }
-
-            for(unsigned k = 0; k < 5; ++k)
-                I += W[k] * f[k];
-
-            f[0] = f[4];
-        }
-        I *= (2.0 * d) / 45.0;
-    }
-    else
-        assert(0);
-
-    return I;
-}
-
-template<typename Real>
-inline
-Real pre_attenuation(const Solution<Real> &solve, const Real d, const unsigned n)
-{
-    Real integral = 1.0;
-    for(unsigned j = 0; j < n; ++j)
-    {
-        integral *= solve.attenuation_1st(solve.X(j*d));
-//        integral *= solve.attenuation_2nd(solve.X(j*d));
-    }
-    return integral;
-}
-
-template<typename Real>
-Real pre_outer(const Solution<Real> &solve,
-           const Real d,
-           const unsigned n)
-{
-    Real I = 0.0;
-
-    for(unsigned i = 0; i < n-1; ++i)
-    {
-        I += solve.emission_1st(solve.X(i*d)) * pre_attenuation(solve, d, i);
-//        I += solve.emission_2nd(solve.X(i*d)) * pre_attenuation(solve, d, i);
-//        I += solve.emission_2nd_approx(solve.X(i*d)) * pre_attenuation(solve, d, i);
-    }
-
-    return I;
-}
+#include "integration.h"
+#include "pre_integration.h"
 
 typedef long double Real;
 std::tr1::random_device rd;
 std::tr1::subtract_with_carry_01<Real, 48, 10, 24> gen(rd());
 
-int main()
+namespace po = boost::program_options;
+
+int main(int argc, const char *argv[])
 {
-    bool pre_integrated_test = true;
+
+    po::options_description desc("Allowed options");
+    desc.add_options()
+        ("help", "produce help message")
+        ("start", po::value< std::string >()->default_value("0 0 0"), "ray starting point")
+        ("end", po::value< std::string >()->default_value("1 0 0"), "ray ending point")
+        ("inner", po::value< std::string>()->default_value("RIEMANN"), "inner integral numerical integration method: RIEMANN, MONTE_CARLO, TRAPEZOID, GAUSS_QUADRATURE, GAUSS_QUADRATURE_5, SIMPSON, BOOLE")
+        ("outer", po::value< std::string>()->default_value("RIEMANN"), "outer integral numerical integration method: RIEMANN, MONTE_CARLO, TRAPEZOID, GAUSS_QUADRATURE, GAUSS_QUADRATURE_5, SIMPSON, BOOLE")
+        ("exp", po::value< std::string>()->default_value("QUADRATIC"), "exponential approximation method: LINEAR, QUADRATIC, CUBIC, QUARTIC, QUINTIC, EXACT")
+        ("step-size", po::value< float >()->default_value(0.125E+0), "step size along the parameterized ray. The ray is parameterized by as X = start + delta * (end - start), where delta is the step size")
+        ("input", po::value< std::string >(), "input nrrd scalar field")
+        ("color", po::value< std::string >(), "input nrrd color transfer function")
+        ("transparency", po::value< std::string >(), "input nrrd extinction coefficient")
+            ;
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help"))
+    {
+        std::cout << desc << "\n";
+        return 1;
+    }
+
+    std::cerr << "VRI (Volume Rendering Integral Discretization Schemes)"
+              << std::endl;
+
+    std::string start_s = vm["start"].as<std::string>();
+    std::string end_s = vm["end"].as<std::string>();
+
+    float start_f[3];
+    float end_f[3];
+
+    sscanf(start_s.c_str(), "%f %f %f", &start_f[0], &start_f[1], &start_f[2]);
+    sscanf(end_s.c_str(), "%f %f %f", &end_f[0], &end_f[1], &end_f[2]);
+
+    Real start[3] = {start_f[0], start_f[1], start_f[2]};
+    Real end[3] = {end_f[0], end_f[1], end_f[2]};
+
+    std::cerr << "\t* Ray starting point: "
+              << start[0] << " " << start[1] << " " << start[2] << std::endl;
+
+    std::cerr << "\t* Ray end point     : "
+              << end[0] << " " << end[1] << " " << end[2] << std::endl;
+
+    std::cerr << "\t* Inner integral numerical discretization method: "
+              << vm["inner"].as<std::string>() << std::endl;
+    std::cerr << "\t* Outer integral numerical discretization method: "
+              << vm["outer"].as<std::string>() << std::endl;
+    std::cerr << "\t* Exponential discretization method             : "
+              << vm["exp"].as<std::string>() << std::endl;
+
+    bool pre_integrated_test = false;
 
     std::vector<Real> I;
 
     if(!pre_integrated_test)
     {
-        VRI_solution_00<Real> _solution;
-        const Solution<Real> &solve(_solution);
+        VRI_solution_00<Real> solve(start, end);
 
-        Method exp_method, inner_method, outer_method;
-
-    //    exp_method = LINEAR;
-    //    exp_method = QUADRATIC;
-    //    exp_method = CUBIC;
-    //    exp_method = QUARTIC;
-    //    exp_method = QUINTIC;
-        exp_method = EXACT;
-
-    //    inner_method = MONTE_CARLO;
-    //    inner_method = RIEMANN;
-    //    inner_method = TRAPEZOID;
-        inner_method = SIMPSON;
-    //    inner_method = GAUSS_QUADRATURE;
-    //    inner_method = GAUSS_QUADRATURE_5;
-
-    //    outer_method = RIEMANN;
-    //    outer_method = TRAPEZOID;
-        outer_method = SIMPSON;
-    //    outer_method = BOOLE;
+        Method  exp_method = getMethod( vm["exp"].as<std::string>() ),
+                inner_method = getMethod( vm["inner"].as<std::string>() ),
+                outer_method = getMethod( vm["outer"].as<std::string>() );
 
         //Number of tests to be made
         unsigned N = 8;
@@ -298,9 +120,7 @@ int main()
     }
     else
     {
-    //    Exp_solution_00<Real> _solution;
-        Exp_solution_02<Real> _solution;
-        const Solution<Real> &solve(_solution);
+        Exp_solution_02<Real> solve(start, end);
 
         //Number of tests to be made
         unsigned N = 8;
@@ -316,7 +136,7 @@ int main()
             std::cout << 1.0 / (n-1) << " " << std::flush;
             std::cerr << "(" << n-1 << "," << std::flush;
 
-            _solution.d = d;
+            solve.d = d;
     //        Real sol = solve.sol(D);
     //        Real num = attenuation(solve, d, n);
             Real sol = solve.sol_vri(D);
@@ -335,7 +155,6 @@ int main()
     for(const Real& err : I)
         std::cout << err << " ";
     std::cout << std::endl;
-
 
     return 0;
 }

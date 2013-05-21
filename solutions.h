@@ -1,6 +1,9 @@
 #ifndef SOLUTIONS_EXP_H
 #define SOLUTIONS_EXP_H
 
+#include <numeric>
+#include <cmath>
+
 const long double PI = std::atan(1.0)*4.0;
 
 template<typename Real>
@@ -8,12 +11,28 @@ struct Point {
     Real x, y, z;
 };
 
+template<typename real>
+inline
+real magnitue(const real *v)
+{
+    return std::sqrt(std::inner_product(v+0, v+3, v+0, real(0.0)));
+}
+
 template<typename Real>
 struct Solution
 {
+    Solution(const Real *start, const Real *end)
+    {
+        for(unsigned i = 0; i < 3; ++i)
+        {
+            m_start[i] = start[i];
+            m_end[i]   = end[i];
+            m_step[i] = end[i]-start[i];
+        }
+    }
+
     virtual inline Real sol(Real) const { assert(0); return Real(0.0); }
     virtual inline Real sol_vri(Real) const { assert(0); return Real(0.0); }
-    virtual inline Point<Real> X(Real) const { assert(0); return Point<Real>(); }
     virtual inline Real s(const Point<Real>&) const { assert(0); return Real(0.0); }
     virtual inline Real emission_1st(const Point<Real>&) const { assert(0); return Real(0.0); }
     virtual inline Real emission_2nd(const Point<Real>&) const { assert(0); return Real(0.0); }
@@ -22,49 +41,114 @@ struct Solution
     virtual inline Real attenuation_2nd(const Point<Real>&) const { assert(0); return Real(0.0); }
     virtual inline Real T(Real) const { assert(0); return Real(0.0); }
     virtual inline Real C(Real) const { assert(0); return Real(0.0); }
+    virtual inline Point<Real> X(Real lambda) const
+    {
+        Point<Real> x;
+        x.x = m_start[0] + lambda*m_step[0];
+        x.y = m_start[1] + lambda*m_step[1];
+        x.z = m_start[2] + lambda*m_step[2];
+        return x;
+    }
+
+    Real m_start[3];
+    Real m_end[3];
+    Real m_step[3];
 };
 
 template<typename Real>
 struct VRI_solution_00 : public Solution<Real>
 {
+    VRI_solution_00(const Real *start, const Real *end) :
+        Solution<Real>::Solution(start, end)
+    {
+    }
     inline Real sol(Real l) const
     {
-    //    return -exp(-l)*( atan(sin(l)/cos(l))-exp(l)+1 );
         return 2-exp(-0.5*sin(l*l))*(sin(l*l)+2);
-    //    return 1-exp(-sin(l))*(sin(l)+1);
-    //    return 1.0-exp(-l);
     }
-
-    inline Point<Real> X(Real l) const
+    inline Real s(const Point<Real>& x) const
     {
-        return {l, 0.0, 0.0};
+        return x.x;
+    }
+    inline Real T(Real l) const
+    {
+        return s(this->X(l))*cos(s(this->X(l))*s(this->X(l)));
+    }
+    inline Real C(Real l) const
+    {
+        return sin(s(this->X(l))*s(this->X(l)));
+    }
+};
+
+
+template<typename Real>
+struct VRI_solution_01 : public Solution<Real>
+{
+    inline Real sol(Real l) const
+    {
+        return -exp(-l)*( atan(sin(l)/cos(l))-exp(l)+1 );
+    }
+    inline Real s(const Point<Real>& x) const
+    {
+        return tan(x.x);
+    }
+    inline Real T(Real l) const
+    {
+        return 1.0;
+    }
+    inline Real C(Real l) const
+    {
+        return atan(s(X(l)));
+    }
+};
+
+template<typename Real>
+struct VRI_solution_02 : public Solution<Real>
+{
+    inline Real sol(Real l) const
+    {
+        return 1-exp(-sin(l))*(sin(l)+1);
     }
 
     inline Real s(const Point<Real>& x) const
     {
-    //    return tan(x.x);
         return x.x;
-        //return x.x;
-        //return x.x;
     }
 
     inline Real T(Real l) const
     {
-    //    return 1.0;
-        return s(X(l))*cos(s(X(l))*s(X(l)));
-    //    return cos(s(X(l)));
-    //    return 1.0;
+        return cos(s(X(l)));
     }
 
     inline Real C(Real l) const
     {
-    //    return atan(s(X(l)));
-        return sin(s(X(l))*s(X(l)));
-        //return sin(s(X(l)));
-        //return 1.0;
+        return sin(s(X(l)));
     }
 };
 
+template<typename Real>
+struct VRI_solution_03 : public Solution<Real>
+{
+    inline Real sol(Real l) const
+    {
+        return 1.0-exp(-l);
+    }
+
+    inline Real s(const Point<Real>& x) const
+    {
+        return x.x;
+    }
+
+    inline Real T(Real l) const
+    {
+        return 1.0;
+    }
+
+    inline Real C(Real l) const
+    {
+        return 1.0;
+    }
+};
 template<typename Real>
 struct Exp_solution_00 : public Solution<Real>
 {
@@ -72,10 +156,6 @@ struct Exp_solution_00 : public Solution<Real>
     inline Real sol(Real l) const
     {
         return exp(1-exp(l));
-    }
-    inline Point<Real> X(Real l) const
-    {
-        return {l, 0.0, 0.0};
     }
 
     inline Real s(const Point<Real>& x) const
@@ -112,6 +192,11 @@ struct Exp_solution_00 : public Solution<Real>
 template<typename Real>
 struct Exp_solution_02 : public Solution<Real>
 {
+    Exp_solution_02(const Real *start, const Real *end) :
+        Solution<Real>::Solution(start, end)
+    {
+    }
+
     mutable Real d = std::numeric_limits<Real>::infinity();
     inline Real sol(Real l) const
     {
@@ -120,10 +205,6 @@ struct Exp_solution_02 : public Solution<Real>
     inline Real sol_vri(Real D) const
     {
         return log(D+1);
-    }
-    inline Point<Real> X(Real l) const
-    {
-        return {l, 0.0, 0.0};
     }
     inline Real s(const Point<Real>& x) const
     {
@@ -192,11 +273,11 @@ struct Exp_solution_02 : public Solution<Real>
     }
     inline Real T(Real l) const
     {
-        return s(X(l));
+        return s(this->X(l));
     }
     inline Real C(Real l) const
     {
-        return 1./s(X(l));
+        return 1./s(this->X(l));
     }
 };
 
