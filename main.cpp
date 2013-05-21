@@ -31,6 +31,7 @@ int main(int argc, const char *argv[])
         ("input", po::value< std::string >(), "input nrrd scalar field")
         ("color", po::value< std::string >(), "input nrrd color transfer function")
         ("transparency", po::value< std::string >(), "input nrrd extinction coefficient")
+        ("check-convergence", "check the method convergence. If an analytical solution is specified, then the solution is used. Otherwise, the convergence is computed from successive refinement.")
             ;
 
     po::variables_map vm;
@@ -57,6 +58,7 @@ int main(int argc, const char *argv[])
 
     Real start[3] = {start_f[0], start_f[1], start_f[2]};
     Real end[3] = {end_f[0], end_f[1], end_f[2]};
+    Real d = vm["step-size"].as<Real>();
 
     std::cerr << "\t* Ray starting point: "
               << start[0] << " " << start[1] << " " << start[2] << std::endl;
@@ -70,16 +72,17 @@ int main(int argc, const char *argv[])
               << vm["outer"].as<std::string>() << std::endl;
     std::cerr << "\t* Exponential discretization method             : "
               << vm["exp"].as<std::string>() << std::endl;
+    std::cerr << "\t* Step size                                     : "
+              << d << std::endl;
 
     bool pre_integrated_test = false;
-
     std::vector<Real> I;
 
     if(!pre_integrated_test)
     {
         VRI_solution_00<Real> solve(start, end);
 
-        Method  exp_method = getMethod( vm["exp"].as<std::string>() ),
+        Method  exp_method   = getMethod( vm["exp"].as<std::string>() ),
                 inner_method = getMethod( vm["inner"].as<std::string>() ),
                 outer_method = getMethod( vm["outer"].as<std::string>() );
 
@@ -90,7 +93,6 @@ int main(int argc, const char *argv[])
 
         //Domain size and step size
         Real D = 1.0;
-        Real d = 0.125;
         std::tr1::uniform_real<> dis(0.0, D);
         for(unsigned test = 0; test < N; ++test)
         {
@@ -118,36 +120,36 @@ int main(int argc, const char *argv[])
             std::cerr << I[I.size()-1] << ") " << std::flush;
         }
     }
-    else
-    {
-        Exp_solution_02<Real> solve(start, end);
+//    else
+//    {
+//        Exp_solution_02<Real> solve(start, end);
 
-        //Number of tests to be made
-        unsigned N = 8;
+//        //Number of tests to be made
+//        unsigned N = 8;
 
-        std::cout << std::setprecision(20);
+//        std::cout << std::setprecision(20);
 
-        //Domain size and step size
-        Real D = 1.0;
-        Real d = 0.125;
-        for(unsigned test = 0; test < N; ++test)
-        {
-            unsigned n = unsigned((D / d) + 1);
-            std::cout << 1.0 / (n-1) << " " << std::flush;
-            std::cerr << "(" << n-1 << "," << std::flush;
+//        //Domain size and step size
+//        Real D = 1.0;
+//        Real d = 0.125;
+//        for(unsigned test = 0; test < N; ++test)
+//        {
+//            unsigned n = unsigned((D / d) + 1);
+//            std::cout << 1.0 / (n-1) << " " << std::flush;
+//            std::cerr << "(" << n-1 << "," << std::flush;
 
-            solve.d = d;
-    //        Real sol = solve.sol(D);
-    //        Real num = attenuation(solve, d, n);
-            Real sol = solve.sol_vri(D);
-            Real num = pre_outer(solve, d, n);
+//            solve.d = d;
+//    //        Real sol = solve.sol(D);
+//    //        Real num = attenuation(solve, d, n);
+//            Real sol = solve.sol_vri(D);
+//            Real num = pre_outer(solve, d, n);
 
-            I.push_back(fabs(sol-num));
-            d = d * 0.5;
+//            I.push_back(fabs(sol-num));
+//            d = d * 0.5;
 
-            std::cerr << I[I.size()-1] << ") " << std::flush;
-        }
-    }
+//            std::cerr << I[I.size()-1] << ") " << std::flush;
+//        }
+//    }
 
     std::cout << std::endl;
     std::cerr << std::endl;
