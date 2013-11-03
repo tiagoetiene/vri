@@ -6,6 +6,7 @@
 #include <boost/program_options.hpp>
 #include <boost/tuple/tuple.hpp>
 
+#include "io.h"
 #include "solutions.h"
 #include "integration.h"
 #include "pre_integration.h"
@@ -58,7 +59,7 @@ int main(int argc, const char *argv[])
 
     Real start[3] = {start_f[0], start_f[1], start_f[2]};
     Real end[3] = {end_f[0], end_f[1], end_f[2]};
-    Real d = vm["step-size"].as<Real>();
+    Real d = static_cast<float>(vm["step-size"].as<float>());
 
     std::cerr << "\t* Ray starting point: "
               << start[0] << " " << start[1] << " " << start[2] << std::endl;
@@ -74,6 +75,9 @@ int main(int argc, const char *argv[])
               << vm["exp"].as<std::string>() << std::endl;
     std::cerr << "\t* Step size                                     : "
               << d << std::endl;
+
+//    boost::shared_ptr<CGageAdaptor> image = LoadImage("teste.h");
+//    image->GetValue(0.0, 0.0, 0.0);
 
     bool pre_integrated_test = false;
     std::vector<Real> I;
@@ -120,36 +124,37 @@ int main(int argc, const char *argv[])
             std::cerr << I[I.size()-1] << ") " << std::flush;
         }
     }
-//    else
-//    {
+    else
+    {
 //        Exp_solution_02<Real> solve(start, end);
+        Exp_solution_00<Real> solve(start, end);
 
-//        //Number of tests to be made
-//        unsigned N = 8;
+        //Number of tests to be made
+        unsigned N = 8;
 
-//        std::cout << std::setprecision(20);
+        std::cout << std::setprecision(20);
 
-//        //Domain size and step size
-//        Real D = 1.0;
-//        Real d = 0.125;
-//        for(unsigned test = 0; test < N; ++test)
-//        {
-//            unsigned n = unsigned((D / d) + 1);
-//            std::cout << 1.0 / (n-1) << " " << std::flush;
-//            std::cerr << "(" << n-1 << "," << std::flush;
+        //Domain size and step size
+        Real D = 1.0;
+        Real d = 0.125;
+        for(unsigned test = 0; test < N; ++test)
+        {
+            unsigned n = unsigned((D / d) + 1);
+            std::cout << 1.0 / (n-1) << " " << std::flush;
+            std::cerr << "(" << n-1 << "," << std::flush;
 
-//            solve.d = d;
-//    //        Real sol = solve.sol(D);
-//    //        Real num = attenuation(solve, d, n);
-//            Real sol = solve.sol_vri(D);
-//            Real num = pre_outer(solve, d, n);
+            solve.d = d;
+    //        Real sol = solve.sol(D);
+    //        Real num = attenuation(solve, d, n);
+            Real sol = solve.sol_vri(D);
+            Real num = pre_outer(solve, d, n);
 
-//            I.push_back(fabs(sol-num));
-//            d = d * 0.5;
+            I.push_back(fabs(sol-num));
+            d = d * 0.5;
 
-//            std::cerr << I[I.size()-1] << ") " << std::flush;
-//        }
-//    }
+            std::cerr << I[I.size()-1] << ") " << std::flush;
+        }
+    }
 
     std::cout << std::endl;
     std::cerr << std::endl;
